@@ -1,8 +1,6 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Hosting;
 using Microsoft.IdentityModel.Tokens;
 using PracticaCST.Data;
 using PracticaCST.Data.Entities;
@@ -16,22 +14,22 @@ namespace PracticaCST.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
-    //[AllowAnonymous]
+    [AllowAnonymous]
     public class AccountController : ControllerBase
     {
-        private readonly SocMediaDb _db;           //readonly = assignable doar in ctor
-        private IConfiguration _config;             //obiect care ma ajuta sa citesc din appsettings.json
+        private readonly SocMediaDb _db;
+        private readonly IConfiguration _config;
 
         public AccountController(SocMediaDb db, IConfiguration config)
         {
-            _db = db;                               //acum am BD
+            _db = db;
             _config = config;
         }
 
         [HttpPost("login")]
-        public ActionResult Login([FromBody] LoginDTO payload)  //din DTO: am acces la username si pass cu care a venit cnv; de verificat daca le am in BD
+        public ActionResult Login([FromBody] LoginDTO payload)
         {
-            var existingUser = _db.Users.SingleOrDefault(u => u.Email == payload.Username);
+            var existingUser = _db.Users.FirstOrDefault(u => u.Email == payload.Username);
             if (existingUser == null || !VerifyPassword(payload.Password, existingUser.HashedPassword))
             {
                 return NotFound();
@@ -42,72 +40,28 @@ namespace PracticaCST.Controllers
         }
 
         [HttpPost("register")]
-        public async Task<ActionResult> Register([FromBody] RegisterDTO payload)
+        public async Task<ActionResult> Register([FromBody] RegistrationDTO payload)
         {
-            if(await _db.Users.AnyAsync(u => u.Email == payload.Email))
+            if (await _db.Users.AnyAsync(u => u.Email == payload.Email))
             {
-                return BadRequest("Email is already in use.");
+                return BadRequest("Email address is already in use.");
             }
 
             var newUser = new User
             {
                 Email = payload.Email,
-                BirthDate = payload.BirthDate
+                FirstName = payload.FirstName,
+                LastName = payload.LastName,
+                BirthDate = payload.BirthDate,
+                Gender = payload.Gender
             };
             newUser.HashedPassword = HashPassword(payload.Password);
 
             await _db.Users.AddAsync(newUser);
             await _db.SaveChangesAsync();
 
-            return new JsonResult(new { Message = "User created succesfully." });
+            return new JsonResult(new { Message = "User created successfully." });
         }
-
-
-
-        [HttpGet("usersList")]
-        [Authorize]
-        public IActionResult GetUsersList(int count = 10)
-        {
-            var users = _db.Users.Take(count).Select(u => new {
-                Email = u.Email,
-                BirthDate = u.BirthDate.ToString("yyyy-MM-dd")
-            }).ToList();
-            return Ok(users);
-        }
-
-
-        [HttpPost("posts")]
-        [Authorize]
-        public async Task<ActionResult> AddPost([FromBody] PostDTO payload)
-        {
-            var userEmail = User.Claims.FirstOrDefault(c => c.Type == JwtRegisteredClaimNames.Email)?.Value;
-
-            if (string.IsNullOrWhiteSpace(payload.Content))
-            {
-                return BadRequest("Post content cannot be empty.");
-            }
-
-            var user = await _db.Users.SingleOrDefaultAsync(u => u.Email == userEmail);
-
-            if (user == null)
-            {
-                return BadRequest("User does not exist.");
-            }
-
-            var post = new Post
-            {
-                UserId = user.Id,
-                Content = payload.Content,
-                CreatedAt = DateTime.UtcNow
-            };
-
-            await _db.Posts.AddAsync(post);
-            await _db.SaveChangesAsync();
-
-            return new JsonResult(new { Message = "Post created successfully." });
-        }
-
-  
 
         private bool VerifyPassword(string password, string hashedPassword)
         {
@@ -130,16 +84,16 @@ namespace PracticaCST.Controllers
             }
         }
 
-      private string GenerateJSONWebToken(User userInfo)
+        private string GenerateJSONWebToken(User userInfo)
         {
             var securityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_config["JWT:Key"]));
             var credentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256);
 
             var claims = new[] {
-            new Claim(JwtRegisteredClaimNames.Email, userInfo.Email),
-            new Claim("profile_picture_url","..."),
-            new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
-        };
+                new Claim(JwtRegisteredClaimNames.Email, userInfo.Email),
+                new Claim("profile_picture_url","..."),
+                new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
+            };
 
             var token = new JwtSecurityToken(_config["JWT:Issuer"],
                 _config["JWT:Issuer"],
@@ -151,4 +105,3 @@ namespace PracticaCST.Controllers
         }
     }
 }
- 
