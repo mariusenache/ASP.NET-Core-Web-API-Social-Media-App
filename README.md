@@ -1,6 +1,6 @@
 # ASP.NET Social Media Backend Project
 
-This is my firs backend project (it's work in progress):
+This is my first project where I learn about the backend:
 
 - Wep API application, using C# and ASP.NET Core framework.; 
 - authentication and authorization sets up using JWT authentication;
